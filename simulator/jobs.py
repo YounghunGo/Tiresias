@@ -221,6 +221,7 @@ class _TFJobs(object):
         # job_dict['sleep'] = int(job_dict['sleep'])
 
         job_dict['gpus'] = list()
+        job_dict['node_to_gpus'] = dict() # yhgo
         job_dict['placements'] = list() #prepare an empty job_placement 
         job_dict['ps_placements'] = list()
         job_dict['w_placements'] = list()
@@ -354,17 +355,23 @@ class _TFJobs(object):
                 util.print_fn('%d-GPU jobs have %d ' % (num_gpu, gjob.total_job))
 
     def create_multi_nodes_placement(self, job, switch_id, node_list):
+        '''
+        {'switch': xx, 'nodes': [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w0, w1, ps1], 'gpus': [0, 1, 2, 3]},
+                                {'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w0, w1, ps1], 'gpus': [0, 1, 2, 3]}]}
+        '''
         tmp_dict = dict() 
         tmp_dict['switch'] = switch_id
         tmp_dict['nodes'] = node_list
+        for node in node_list:
+            node['gpus'] = job['node_to_gpus'][node['id']]
+            assert node['gpus'] != None
         job['placements'].append(tmp_dict)
-
-
+        
 
     def create_single_node_placement(self, job, switch_id, node_id, num_gpu, num_cpu, mem=0):
         '''
-        under this switch, there is only one need used
-        {'switch': xx, 'nodes': [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w0, w1, ps1]}]}
+        under this switch, there is only one need used ('gpus' is going to be added by yhgo)
+        {'switch': xx, 'nodes': [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w0, w1, ps1], 'gpus': [0, 1, 2, 3]}]}
         '''
         tmp_dict = dict() 
         tmp_dict['switch'] = switch_id
@@ -376,6 +383,11 @@ class _TFJobs(object):
         node_dict['tasks'] = list()
         # node_dict['network'] = round(sum(job['w_network']) + sum(job['ps_network']), 1)
         node_dict['network'] = 0 #single machine, no network traffic
+
+        # yhgo
+        assert job['gpus'] != None
+        assert len(job['gpus']) != 0
+        node_dict['gpus'] = job['gpus']
 
         tmp_dict['nodes'] = list()
         tmp_dict['nodes'].append(node_dict)
@@ -446,6 +458,24 @@ class _TFJobs(object):
             self.gpu_job[num_gpu].runnable_jobs.append(job)
         else:
             self.runnable_jobs.append(job)
+
+    def move_to_pending_queue(self, job):
+        ''' job gets into the system: pending or running, and finally END'''
+        #job not started yet
+        job['status'] = 'PENDING'
+        job['start_time'] = sys.maxint
+        job['last_start_time'] = 0
+        job['last_check_time'] = job['submit_time']
+        job['total_executed_time'] = 0 # total
+        job['executed_time'] = 0 # used for deciding priority queue, may be zeroed by last_pending_time
+        job['pending_time'] = 0
+        job['last_pending_time'] = 0 # how much pending_time the job has since last entering the highest priority queue
+
+        if FLAGS.schedule == 'multi-dlas-gpu':
+            num_gpu = job['num_gpu']
+            self.gpu_job[num_gpu].pending_jobs.append(job)
+        else:
+            self.pending_jobs.append(job)
     
     def update_priority_queues(self, gputime=False):
         for queue in self.queues:
@@ -696,6 +726,12 @@ class _TFJobs(object):
         self.gpu_job[16].runnable_jobs.extend([5,6,7,8,9])
 
         self.reserve_gpus(total_num)
+
+    def get_low_priority_running_job(self):
+        if len(self.running_jobs) == 0:
+            return False
+
+        return self.running_jobs[-1]
 
 JOBS = _TFJobs()
 

@@ -34,7 +34,7 @@ class _Log(object):
         self.job_list = list()
         self.mem_list = list()
 
-    def init_log(self):
+    def init_log(self, schedule):
         self.log_path = FLAGS.log_path
         if self.log_path[-1] == '/':
             self.log_path = self.log_path[:-1]
@@ -50,7 +50,7 @@ class _Log(object):
         ret = subprocess.check_output(cmd, shell=True)
 
         self.log_file = self.log_path + '/cluster.csv'
-        self.log_job = self.log_path + '/job.csv'
+        self.log_job = self.log_path + '/' + schedule + '.csv'
         if FLAGS.scheme != 'count':
             self.log_cpu = self.log_path + '/cpu.csv'
             self.log_gpu = self.log_path + '/gpu.csv'
@@ -344,9 +344,9 @@ class _Log(object):
         executed_time = job['end_time'] - job['start_time']
         jct = int(job['end_time'] - job['submit_time'])
         if FLAGS.scheme == 'count':
-            self.job_list.append([event_time, job['job_id'], job['num_gpu'], job['submit_time'], job['start_time'], job['end_time'], executed_time, jct, job['duration'], job['pending_time'], job['preempt'], job['resume'], job['promote']])
+            self.job_list.append([event_time, job['job_idx'], job['num_gpu'], job['submit_time'], job['start_time'], job['end_time'], executed_time, jct, job['duration'], job['pending_time'], job['preempt'], job['resume'], job['promote']])
         else:
-            self.job_list.append([event_time, job['job_id'], job['num_gpu'], job['submit_time'], job['start_time'], job['end_time'], executed_time, jct, job['duration'], job['pending_time'], job['preempt'], job['promote']])
+            self.job_list.append([event_time, job['job_idx'], job['num_gpu'], job['submit_time'], job['start_time'], job['end_time'], executed_time, jct, job['duration'], job['pending_time'], job['preempt'], job['promote']])
 
 
         if len(self.job_list) >= 1:

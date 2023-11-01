@@ -95,10 +95,23 @@ class _Cluster(object):
         self.free_gpu = self.num_gpu
         for switch in self.switch_list:
             for node in switch.node_list:
-                node.init_node(self.num_gpu_p_node, self.num_cpu_p_node)
+                #node.init_node(self.num_gpu_p_node, self.num_cpu_p_node)
+                # editted referenced from muri simulator by yhgo
+                node.init_node(self.num_gpu_p_node, self.num_cpu_p_node, self.mem_p_node)
 
         if FLAGS.schedule == 'dlas-gpu-pack':
             self.init_dlas_pack_gpu() 
+
+    def empty_infra_for_scheduling(self):
+        self.free_gpu = self.num_gpu
+        for switch in self.switch_list:
+            for node in switch.node_list:
+                #node.init_node(self.num_gpu_p_node, self.num_cpu_p_node)
+                # editted referenced from muri simulator by yhgo
+                node.init_node(self.num_gpu_p_node, self.num_cpu_p_node, self.mem_p_node)
+
+        if FLAGS.schedule == 'dlas-gpu-pack':
+            self.init_dlas_pack_gpu()
 
     # '''
     # Allocate job resource
@@ -1427,6 +1440,7 @@ class _Cluster(object):
 
 
     def release_gpus(self, job):
+        assert False
         for placement in job['placements']:
             if ('switch' not in placement) or ('nodes' not in placement):
                 job['status'] = 'ERROR'
@@ -1453,6 +1467,7 @@ class _Cluster(object):
          {'switch': xx, 'nodes': [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w2, ps2]}, {'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network_load': xxxx, 'tasks': [ps0]}]}
         ]
         '''
+        #print('release_job_res')
         if FLAGS.schedule == 'dlas-gpu-pack':
             job_util = job['model']['mem_util']
             for gpu_idx in job['gpus']:
@@ -1479,15 +1494,46 @@ class _Cluster(object):
                 return False
 
             switch = self.switch_list[placement['switch']]
+
             ret = switch.release_job_res(placement['nodes'])
             if ret == False:
                 job['status'] = 'ERROR'
                 return False
 
         job['status'] = 'END'
+
         util.print_fn('**** job[%d] completed' % job['job_idx'])
+
         return True
 
+    def release_job_res_preempt(self, job):
+        '''
+        release gpu/cpu/network
+        placements:
+        [{'switch': xx, 'nodes': [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, tasks': [w0, w1, ps1]}]},
+         {'switch': xx, 'nodes': [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w2, ps2]}, {'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network_load': xxxx, 'tasks': [ps0]}]}
+        ]
+        '''
+        #print('release_job_res_preempt')
+        for placement in job['placements']:
+            if ('switch' not in placement) or ('nodes' not in placement):
+                job['status'] = 'ERROR'
+                return False
+
+            switch = self.switch_list[placement['switch']]
+            tmp_gpu_idx = list()
+            for gpu in job['gpus']:
+                tmp_gpu_idx.append(gpu.id)
+
+            switch = self.switch_list[placement['switch']]
+            ret = switch.release_job_res(placement['nodes'])
+            if ret == False:
+                job['status'] = 'ERROR'
+                return False
+
+        job['status'] = 'PENDING'
+
+        return True
 
 CLUSTER = _Cluster()
 

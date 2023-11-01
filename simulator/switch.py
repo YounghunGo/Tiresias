@@ -50,9 +50,10 @@ class _Switch(object):
             [need_gpu / gpu_p_node] nodes, and one node with [need_gpu % gpu_p_node]
         if can't find , give up, and return False
         '''
+        #print("try_cross_node_alloc job idx: ", job['job_idx'])
         need_gpu = job['num_gpu']
-        num_full_nodes = math.floor(need_gpu / self.num_gpu_p_node)
-        last_node_gpu =  need_gpu % self.num_gpu_p_node
+        num_full_nodes = math.floor(need_gpu / self.num_gpu_p_node) # number of fully occupied node (if allocate 13 gpus, there are 3 full nodes and 1 last node)
+        last_node_gpu =  need_gpu % self.num_gpu_p_node 
         last_node_cpu = int(last_node_gpu * 6)
         last_node = None
         idle_node_cpu = int(self.num_gpu_p_node * 6) #w:2, ps:4
@@ -88,7 +89,7 @@ class _Switch(object):
         node_list = list()
         idx = 0
         for node in full_node_list:
-            node.alloc_job_res(node.num_gpu, idle_node_cpu)  
+            node.alloc_job_res(node.num_gpu, idle_node_cpu, job)  
             node.free_mem -= ps_w_mem * node.num_gpu
             node_dict = dict()
             node_dict['id'] = node.id
@@ -119,7 +120,7 @@ class _Switch(object):
             node_list.append(node_dict)
 
         if last_node_gpu != 0:
-            last_node.alloc_job_res(last_node_gpu, last_node_cpu)
+            last_node.alloc_job_res(last_node_gpu, last_node_cpu, job)
             last_node.free_mem -= ps_w_mem * last_node_gpu 
             node_dict = dict()
             node_dict['id'] = last_node.id
@@ -144,6 +145,7 @@ class _Switch(object):
             node_list.append(node_dict)
 
         JOBS.create_multi_nodes_placement(job, self.id, node_list)
+        #print("try_cross_node_alloc job = ", job)
         return True
 
 
@@ -153,6 +155,7 @@ class _Switch(object):
         try get gpus from a single node
         if can't find a node, give up, and return False
         '''
+        #print("try_single_node_alloc")
         need_gpu = job['num_gpu']
         if len(job['ps_network']) == 0 and job['num_gpu'] == 1:
             need_cpu = int(need_gpu * 2) # worker:2
@@ -162,7 +165,7 @@ class _Switch(object):
         for node in self.node_list:
             if (node.check_free_gpus() >= need_gpu) and (node.check_free_cpus() >= need_cpu) and (node.free_mem >= JOBS.worker_mem):
                 # if node.alloc_gpus(need_gpu) == False:
-                if node.alloc_job_res(need_gpu, need_cpu) == False:
+                if node.alloc_job_res(need_gpu, need_cpu, job) == False:
                     continue
                 node.free_mem = node.free_mem - JOBS.worker_mem
                 traffic = JOBS.create_single_node_placement(job, self.id, node.id, need_gpu, need_cpu, JOBS.worker_mem)
@@ -236,12 +239,14 @@ class _Switch(object):
         [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w2, ps2]}, 
         {'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [ps0]}]
         '''
+        #print(nodes)
         for node_dict in nodes:
             if ('id' not in node_dict) or ('num_gpu' not in node_dict) or ('num_cpu' not in node_dict) or ('tasks' not in node_dict):
                 return False
             node = self.node_list[node_dict['id']]
             # ret = node.release_gpus(node_dict['num_gpu'])
             ret = node.release_job_res(node_dict)
+            
             if ret == False:
                 return False
 

@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import util
 
+from gpu import _GPU
 '''
 TODO: add cpu and network load support in class _Node
 '''
@@ -12,7 +13,7 @@ class _Node(object):
         self.id = id
         self.num_cpu = num_cpu
         self.free_cpus = num_cpu
-        self.num_gpu = num_gpu       
+        self.num_gpu = num_gpu # number of gpus equipped (e.g., 4, 8)      
         self.free_gpus = num_gpu
         #network load: can be bw, or the amount of traffic
         # in and out should be the same
@@ -25,6 +26,13 @@ class _Node(object):
         #node class for gandiva
         self.job_gpu = 0
         self.num_jobs = 0
+
+        # yhgo
+        self.gpus = list() # [0 ~ num_gpus]
+
+        for i in range(self.num_gpu):
+            tmp_g = _GPU(id, i) # first allocation 
+            self.gpus.append(tmp_g)
 
         util.print_fn('    Node[%d] has %d gpus, %d cpus, %d G memory' % (id, num_gpu, num_cpu, mem))
     
@@ -42,6 +50,8 @@ class _Node(object):
         self.add_gpus(self.num_gpu)        
         self.add_cpus(self.num_gpu)        
 
+        for gpu in self.gpus:
+            gpu.using = False
 
     ''' GPU  '''
     def add_gpus(self, num_gpu=0):
@@ -129,10 +139,11 @@ class _Node(object):
         self.network_out = round(self.network_in, 1)
 
 
-    def alloc_job_res(self, num_gpu=0, num_cpu=0):
+    def alloc_job_res(self, num_gpu=0, num_cpu=0, job=None):
         '''
         alloc job resource
         '''
+        #util.print_fn("alloc_job_res")
         gpu = self.alloc_gpus(num_gpu)
         cpu = self.alloc_cpus(num_cpu)
 
@@ -140,6 +151,33 @@ class _Node(object):
             self.release_gpus(num_gpu)
             self.release_cpus(num_cpu)
             return False
+
+        # for g in self.gpus:
+        #     util.print_fn('before %s %s' % (g, g.using))
+
+        # execute for returning true from this line
+        tmp_gpu_idxs = list()
+        num_gpu_alloc = 0
+        for gpu in self.gpus:
+            if gpu.using == False and num_gpu_alloc < num_gpu:
+                tmp_gpu_idxs.append(gpu)
+                assert gpu.using == False
+                gpu.using = True
+                num_gpu_alloc = num_gpu_alloc + 1
+
+        len_false = 0
+        for g in self.gpus:
+            #util.print_fn('after %s %s' % (g, g.using))
+            if g.using == False:
+                len_false += 1
+
+        #print('remain gpu:', self.check_free_gpus())
+        #print('tmp_gpu_idxs:', tmp_gpu_idxs)
+        
+        assert len(tmp_gpu_idxs) > 0
+        assert self.check_free_gpus() == len_false
+        job['gpus'] = tmp_gpu_idxs
+        job['node_to_gpus'][self.id] = tmp_gpu_idxs
 
         return True 
 
@@ -154,6 +192,9 @@ class _Node(object):
 
         self.free_mem = self.free_mem + node_dict['mem']
 
+        for g in node_dict['gpus']:
+            self.gpus[g.id].using = False
+            
         return (cpu and gpu)
 
     def release_job_gpu_cpu(self, num_gpu, num_cpu):
