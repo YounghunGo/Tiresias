@@ -1521,18 +1521,12 @@ class _Cluster(object):
                 return False
 
             switch = self.switch_list[placement['switch']]
-            tmp_gpu_idx = list()
-            for gpu in job['gpus']:
-                tmp_gpu_idx.append(gpu.id)
-
-            switch = self.switch_list[placement['switch']]
             ret = switch.release_job_res(placement['nodes'])
             if ret == False:
                 job['status'] = 'ERROR'
                 return False
 
-        job['status'] = 'PENDING'
-
+        job['status'] = 'PREEMPTED'
         return True
 
 CLUSTER = _Cluster()

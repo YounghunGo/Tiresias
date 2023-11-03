@@ -176,8 +176,10 @@ class _Node(object):
         
         assert len(tmp_gpu_idxs) > 0
         assert self.check_free_gpus() == len_false
-        job['gpus'] = tmp_gpu_idxs
-        job['node_to_gpus'][self.id] = tmp_gpu_idxs
+
+
+        job['tmp_gpus'] = tmp_gpu_idxs
+        job['tmp_node_to_gpus'][self.id] = tmp_gpu_idxs
 
         return True 
 
@@ -186,6 +188,8 @@ class _Node(object):
         input is node_dict from placement
         {'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w2, ps2]}
         '''
+        # print("node_dict['num_gpu']", node_dict['num_gpu'])
+
         self.release_network_load(node_dict['network'], node_dict['network'])
         cpu = self.release_cpus(node_dict['num_cpu'])
         gpu = self.release_gpus(node_dict['num_gpu'])
@@ -194,6 +198,8 @@ class _Node(object):
 
         for g in node_dict['gpus']:
             self.gpus[g.id].using = False
+
+        # print("g", g)
             
         return (cpu and gpu)
 

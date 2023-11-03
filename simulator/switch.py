@@ -163,6 +163,7 @@ class _Switch(object):
             need_cpu = int(need_gpu * 6) # worker:2, ps:4
 
         for node in self.node_list:
+            # print("node.check_free_gpus()", node.check_free_gpus())
             if (node.check_free_gpus() >= need_gpu) and (node.check_free_cpus() >= need_cpu) and (node.free_mem >= JOBS.worker_mem):
                 # if node.alloc_gpus(need_gpu) == False:
                 if node.alloc_job_res(need_gpu, need_cpu, job) == False:
@@ -209,9 +210,11 @@ class _Switch(object):
         '''
         need_gpu = job['num_gpu']
         ret = False
-        if need_gpu > self.num_gpu_p_node:
+        if need_gpu > self.num_gpu_p_node: # there is situation that cannot allocate even could try cross allocation.
+            # print("try_cross_node_alloc")
             ret = self.try_cross_node_alloc(job)
         else:
+            # print("try_single_node_alloc")
             ret = self.try_single_node_alloc(job)
 
         return ret

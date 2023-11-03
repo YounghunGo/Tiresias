@@ -185,7 +185,8 @@ class _TFJobs(object):
         job_dict['duration'] = int(float(job_dict['duration']))
         # job_dict['duration'] = int(job_dict['duration'])
 
-        job_dict['rank'] = sys.maxint
+        # job_dict['rank'] = sys.maxsize
+        job_dict['rank'] = sys.maxsize
 
 
         if 'start_time' not in job_dict:
@@ -198,7 +199,8 @@ class _TFJobs(object):
         if 'submit_time' in job_dict:
             job_dict['r_submit_time'] = int(-1 * job_dict['submit_time'])
 
-        job_dict['start_time'] = sys.maxint
+        # job_dict['start_time'] = sys.maxsize
+        job_dict['start_time'] = sys.maxsize
         job_dict['end_time'] = 0
         job_dict['pending_time'] = 0
 
@@ -220,8 +222,8 @@ class _TFJobs(object):
         # job_dict['num_batch'] = int(job_dict['num_batch'])
         # job_dict['sleep'] = int(job_dict['sleep'])
 
-        job_dict['gpus'] = list()
-        job_dict['node_to_gpus'] = dict() # yhgo
+        job_dict['tmp_gpus'] = list() # yhgo
+        job_dict['tmp_node_to_gpus'] = dict() # yhgo
         job_dict['placements'] = list() #prepare an empty job_placement 
         job_dict['ps_placements'] = list()
         job_dict['w_placements'] = list()
@@ -294,18 +296,12 @@ class _TFJobs(object):
                 # for ps in job['ps_network']:
                 #     ps_writer.writerow(ps)
                 #     ps_w_writer.writerow(ps)
-                
-                
-
-                
+                  
         ps_max_ave_fd.close()
         ps_max99_ave_fd.close()
         w_fd.close()
         ps_fd.close()
         ps_w_fd.close()
-        
-
-
 
     def read_job_info(self, job_idx, field=None):
         ''' Read  job information, if field == NONE, show all job info'''
@@ -363,9 +359,12 @@ class _TFJobs(object):
         tmp_dict['switch'] = switch_id
         tmp_dict['nodes'] = node_list
         for node in node_list:
-            node['gpus'] = job['node_to_gpus'][node['id']]
+            node['gpus'] = job['tmp_node_to_gpus'][node['id']]
             assert node['gpus'] != None
         job['placements'].append(tmp_dict)
+
+        job['tmp_gpus'] = dict()
+        job['tmp_node_to_gpus'] = dict()
         
 
     def create_single_node_placement(self, job, switch_id, node_id, num_gpu, num_cpu, mem=0):
@@ -385,13 +384,16 @@ class _TFJobs(object):
         node_dict['network'] = 0 #single machine, no network traffic
 
         # yhgo
-        assert job['gpus'] != None
-        assert len(job['gpus']) != 0
-        node_dict['gpus'] = job['gpus']
+        # assert job['gpus'] != None
+        # assert len(job['gpus']) != 0
+        node_dict['gpus'] = job['tmp_gpus']
 
         tmp_dict['nodes'] = list()
         tmp_dict['nodes'].append(node_dict)
         job['placements'].append(tmp_dict)
+
+        job['tmp_gpus'] = dict()
+        job['tmp_node_to_gpus'] = dict()
 
         return node_dict['network']
 
@@ -445,7 +447,7 @@ class _TFJobs(object):
         ''' job gets into the system: pending or running, and finally END'''
         #job not started yet
         job['status'] = 'PENDING'
-        job['start_time'] = sys.maxint
+        job['start_time'] = sys.maxsize
         job['last_start_time'] = 0
         job['last_check_time'] = job['submit_time']
         job['total_executed_time'] = 0 # total
@@ -463,7 +465,7 @@ class _TFJobs(object):
         ''' job gets into the system: pending or running, and finally END'''
         #job not started yet
         job['status'] = 'PENDING'
-        job['start_time'] = sys.maxint
+        job['start_time'] = sys.maxsize
         job['last_start_time'] = 0
         job['last_check_time'] = job['submit_time']
         job['total_executed_time'] = 0 # total
