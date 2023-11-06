@@ -1500,6 +1500,9 @@ class _Cluster(object):
                 job['status'] = 'ERROR'
                 return False
 
+        # release job's gpus
+        # job.gpus = list()
+
         job['status'] = 'END'
 
         util.print_fn('**** job[%d] completed' % job['job_idx'])
@@ -1515,6 +1518,7 @@ class _Cluster(object):
         ]
         '''
         #print('release_job_res_preempt')
+        # print("job['placements']", job['placements'])
         for placement in job['placements']:
             if ('switch' not in placement) or ('nodes' not in placement):
                 job['status'] = 'ERROR'
@@ -1526,7 +1530,11 @@ class _Cluster(object):
                 job['status'] = 'ERROR'
                 return False
 
+        # release job's gpus
+        # job['gpus'] = None
+
         job['status'] = 'PREEMPTED'
+        # job['status'] = 'PENDING'
         return True
 
 CLUSTER = _Cluster()

@@ -99,7 +99,7 @@ class _TFJobs(object):
         self.completed_jobs = list()
 
         self.migratable_jobs = list()
-        self.num_queue = 3
+        self.num_queue = 2
         self.queues = [list() for i in range(self.num_queue)]
         self.queue_limit = [3250, 7200, 18000]
 
@@ -210,6 +210,7 @@ class _TFJobs(object):
         job_dict['last_check_time'] = 0
         job_dict['executed_time'] = 0
 
+        job_dict['preemption_overhead'] = 0 # yhgo
         job_dict['preempt'] = 0
         job_dict['resume'] = 0
         job_dict['promote'] = 0

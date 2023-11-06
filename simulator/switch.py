@@ -23,6 +23,7 @@ class _Switch(object):
         self.id = id
         self.node_list = list()
         util.print_fn('  Switch[%d] has %d nodes' % (id, num_node))
+        self.test_cnt = 0
 
     def add_nodes(self, num_node=0, num_gpu_p_node=0, num_cpu_p_node=0, mem_p_node=0):
         if num_node != 0 and num_gpu_p_node != 0 and num_cpu_p_node != 0 and mem_p_node != 0:
@@ -210,12 +211,26 @@ class _Switch(object):
         '''
         need_gpu = job['num_gpu']
         ret = False
-        if need_gpu > self.num_gpu_p_node: # there is situation that cannot allocate even could try cross allocation.
+
+        max_idle_gpu = 0
+        for node in self.node_list:
+            if max_idle_gpu < node.check_free_gpus():
+                max_idle_gpu = node.check_free_gpus()
+        # print("max_idle_gpu", max_idle_gpu, "need_gpu", need_gpu)
+
+        # if need_gpu > self.num_gpu_p_node: # there is situation that cannot allocate even could try cross allocation.
+        if need_gpu > self.num_gpu_p_node or need_gpu > max_idle_gpu:
             # print("try_cross_node_alloc")
             ret = self.try_cross_node_alloc(job)
         else:
             # print("try_single_node_alloc")
             ret = self.try_single_node_alloc(job)
+
+        # if job['job_idx'] != 61:
+        #     print(job)
+        #     self.test_cnt += 1
+        #     if self.test_cnt == 2:
+        #         assert job['job_idx'] != 61
 
         return ret
 

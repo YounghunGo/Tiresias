@@ -13,6 +13,7 @@ class _GPU(object):
         self.node_id = node_id
         #self.switch_id = switch_id
         self.using = False
+        self.pause_ov = 0
 
     def release(self):
         self.using = False

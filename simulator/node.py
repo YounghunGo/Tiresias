@@ -143,7 +143,7 @@ class _Node(object):
         '''
         alloc job resource
         '''
-        #util.print_fn("alloc_job_res")
+        # util.print_fn("alloc_job_res")
         gpu = self.alloc_gpus(num_gpu)
         cpu = self.alloc_cpus(num_cpu)
 
@@ -164,13 +164,19 @@ class _Node(object):
                 assert gpu.using == False
                 gpu.using = True
                 num_gpu_alloc = num_gpu_alloc + 1
+                assert job != None
+                # job['gpus'].append(gpu)
+        assert len(tmp_gpu_idxs) == num_gpu
+        # attach gpus to the job class
+        
 
         len_false = 0
         for g in self.gpus:
-            #util.print_fn('after %s %s' % (g, g.using))
+            # util.print_fn('after %s %s' % (g, g.using))
             if g.using == False:
                 len_false += 1
 
+        # assert job['job_idx'] != 61
         #print('remain gpu:', self.check_free_gpus())
         #print('tmp_gpu_idxs:', tmp_gpu_idxs)
         
@@ -180,7 +186,7 @@ class _Node(object):
 
         job['tmp_gpus'] = tmp_gpu_idxs
         job['tmp_node_to_gpus'][self.id] = tmp_gpu_idxs
-
+        
         return True 
 
     def release_job_res(self, node_dict):
@@ -196,11 +202,14 @@ class _Node(object):
 
         self.free_mem = self.free_mem + node_dict['mem']
 
+        # print(node_dict['gpus'])
         for g in node_dict['gpus']:
+            # print("g.id", g.id)
+            assert self.gpus[g.id].using == True
             self.gpus[g.id].using = False
 
         # print("g", g)
-            
+        # print("cpu", cpu, "gpu", gpu)
         return (cpu and gpu)
 
     def release_job_gpu_cpu(self, num_gpu, num_cpu):

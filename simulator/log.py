@@ -105,7 +105,7 @@ class _Log(object):
             if FLAGS.scheme == 'count':
                 log_writer.writerow(['time', 'job_id', 'num_gpu', 'submit_time', 'start_time', 'end_time', 'executed_time', 'JCT', 'duration', 'pending_time', 'preempt', 'resume', 'promote'])
             else:
-                log_writer.writerow(['time', 'job_id', 'num_gpu', 'submit_time', 'start_time', 'end_time', 'executed_time', 'JCT', 'duration', 'pending_time', 'preempt', 'promote'])
+                log_writer.writerow(['time', 'job_id', 'num_gpu', 'submit_time', 'start_time', 'end_time', 'executed_time', 'JCT', 'duration', 'pending_time', 'preempt', 'preemption_overhead', 'promote'])
         fd.close()
 
 
@@ -338,7 +338,7 @@ class _Log(object):
 
     def job_complete(self, job, event_time):
         '''
-        ['even_time', 'job_id', 'num_gpu', 'submit_time', 'start_time', 'end_time', 'executed time', duration', 'pending_time']
+        ['even_time', 'job_id', 'num_gpu', 'submit_time', 'start_time', 'end_time', 'executed time', duration', 'pending_time', 'preemption_overhead']
         '''
         job['end_time'] = event_time
         executed_time = job['end_time'] - job['start_time']
@@ -346,7 +346,7 @@ class _Log(object):
         if FLAGS.scheme == 'count':
             self.job_list.append([event_time, job['job_idx'], job['num_gpu'], job['submit_time'], job['start_time'], job['end_time'], executed_time, jct, job['duration'], job['pending_time'], job['preempt'], job['resume'], job['promote']])
         else:
-            self.job_list.append([event_time, job['job_idx'], job['num_gpu'], job['submit_time'], job['start_time'], job['end_time'], executed_time, jct, job['duration'], job['pending_time'], job['preempt'], job['promote']])
+            self.job_list.append([event_time, job['job_idx'], job['num_gpu'], job['submit_time'], job['start_time'], job['end_time'], executed_time, jct, job['duration'], job['pending_time'], job['preempt'], job['preemption_overhead'], job['promote']])
 
 
         if len(self.job_list) >= 1:

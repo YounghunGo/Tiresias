@@ -105,10 +105,12 @@ LOG = log.LOG
 # assume preemption overheads are given likewise 
     # key of dictionary: model name (e.g., 'a', 'b') - traces can be found in traces directory (~/yhgo/Tiresias/simulator/traces/)
     # value of dictionary: preemption time (seconds)
-pause_overhead = {'a': 10, 'b': 20, 'c': 30, 'd': 40, 'e': 50, 'f': 60}
-load_overhead = {'a': 10, 'b': 20, 'c': 30, 'd': 40, 'e': 50, 'f': 60}
+pause_time = {'a': 10, 'b': 20, 'c': 30, 'd': 40, 'e': 50, 'f': 60}
+load_time = {'a': 30, 'b': 60, 'c': 90, 'd': 120, 'e': 150, 'f': 180}
 
-model_build_time = {'a': 100, 'b': 200, 'c': 300, 'd': 400, 'e': 500, 'f': 600}
+model_build_time = {'a': 10, 'b': 20, 'c': 30, 'd': 40, 'e': 50, 'f': 60}
+ckpt_restore_time = {'a': 10, 'b': 20, 'c': 30, 'd': 40, 'e': 50, 'f': 60}
+warmup_time = {'a': 10, 'b': 20, 'c': 30, 'd': 40, 'e': 50, 'f': 60}
 
 def parse_job_file(trace_file):
     #check trace_file is *.csv
@@ -351,7 +353,7 @@ def shortest_job_first_sim_jobs(gputime=False): # SJF
         LOG.checkpoint(event_time)
 
 
-def smallest_first_sim_jobs(gputime=False): # SRTF (gputime=False), SRSF (gputime=True)
+def smallest_first_sim_jobs(gputime=False):
     '''
     new jobs are added to the end of the ending queue
     but in the queue, shortest (gpu) job first be served, until no resource
@@ -496,7 +498,7 @@ def sort_all_jobs(gputime=False):
             JOBS.running_jobs.sort(key = lambda e:e.__getitem__('remaining_time'))
             JOBS.pending_jobs.sort(key = lambda e:e.__getitem__('remaining_time'))
 
-def shortest_first_sim_jobs(gputime=False):
+def shortest_first_sim_jobs(gputime=False): # SRTF (gputime=False), SRSF (gputime=True)
     '''
     new jobs are added to the end of the ending queue
     but in the queue, shortest (gpu) job first be served, until no resource
@@ -555,8 +557,8 @@ def shortest_first_sim_jobs(gputime=False):
                 s_job['remaining_gputime'] = int(s_job['remaining_time'] * s_job['num_gpu'])
                 util.print_fn('---- job[%d] is added' % s_job['job_idx'])
 
-        print('running_jobs: %d, pending_jobs: %d' % (len(JOBS.running_jobs), len(JOBS.pending_jobs)))
-        print('free gpus:', CLUSTER.check_free_gpu())
+        # print('running_jobs: %d, pending_jobs: %d' % (len(JOBS.running_jobs), len(JOBS.pending_jobs)))
+        # print('free gpus:', CLUSTER.check_free_gpu())
 
         for rjob in JOBS.running_jobs:
             tmp = int(event_time - rjob['last_check_time']) 
@@ -583,44 +585,75 @@ def shortest_first_sim_jobs(gputime=False):
         run_jobs = list()
         preempt_jobs = list()
 
-        # if running job's remaining (gpu) time is larger than one in the pending_jobs, then the corresponding running jobs go to preempt_jobs
+        # if running job's remaining (gpu)time is larger than that of pending_jobs, then the corresponding running jobs go to preempt_jobs
         pending_idx = 0
-        for rjob in reversed(JOBS.running_jobs):
-            if len(JOBS.pending_jobs) == 0 or pending_idx == len(JOBS.pending_jobs):
-                break
-            pjob = JOBS.pending_jobs[pending_idx]
+        sum_num_gpu = 0
+        free_gpus = 0
+        for j in JOBS.pending_jobs:
+            sum_num_gpu += j['num_gpu']
 
-            if gputime:
-                if rjob['remaining_gputime'] > pjob['remaining_gputime']:
-                    preempt_jobs.append(rjob)
-                    pending_idx = pending_idx + 1
-                else:
+        # preemption is only enabled when all of the pending jobs cannot be allocated
+        if CLUSTER.check_free_gpu() < sum_num_gpu:
+            for rjob in reversed(JOBS.running_jobs):
+                if len(JOBS.pending_jobs) == 0 or pending_idx == len(JOBS.pending_jobs):
                     break
-            else:
-                # print("rjob['remaining_time']:", rjob['remaining_time'], "pjob['remaining_time']:", pjob['remaining_time'])
-                if rjob['remaining_time'] > pjob['remaining_time']:
-                    preempt_jobs.append(rjob)
-                    pending_idx = pending_idx + 1
-                else:
-                    break
+                pjob = JOBS.pending_jobs[pending_idx]
 
-        # release resource for preempt_jobs
-        for job in preempt_jobs:
-            ret = CLUSTER.release_job_res_preempt(job)
-            assert ret != False
-            JOBS.running_jobs.remove(job)     
-            JOBS.pending_jobs.append(job)
-            job['preempt'] = int(job['preempt'] + 1)
-            del job['placements'][:]
+                if gputime:
+                    if rjob['remaining_gputime'] > pjob['remaining_gputime']:
+                        preempt_jobs.append(rjob)
+                        pending_idx = pending_idx + 1
+
+                else:
+                    # print("rjob['remaining_time']:", rjob['remaining_time'], "pjob['remaining_time']:", pjob['remaining_time'])
+                    if rjob['remaining_time'] > pjob['remaining_time']:
+                        preempt_jobs.append(rjob)
+                        pending_idx = pending_idx + 1
+
+
+            # release resource for preempt_jobs
+            for job in preempt_jobs:
+                # add pause overhead to gpus ==> loaded job gets the overhead
+                model_name = job['model_name']
+                for gpu in job['placements'][0]['nodes'][0]['gpus']:
+                    assert gpu.pause_ov == 0
+                    gpu.pause_ov = pause_time[model_name] # is it copied? i wanna keep the data.
+
+                ret = CLUSTER.release_job_res_preempt(job)
+                assert ret != False
+                JOBS.running_jobs.remove(job)     
+                JOBS.pending_jobs.append(job)
+                job['preempt'] = int(job['preempt'] + 1)
+                job['preemption_overhead'] += pause_time[model_name]
+                del job['placements'][:]
 
         # re-sort fot allcation of pending jobs
         sort_all_jobs(gputime)
 
-        # allocate resource for (newly/resumed) running jobs
+        # allocate resource for (newly/resumed) jobs
         for pjob in JOBS.pending_jobs:
             ret = try_get_job_res(pjob) 
             if ret == True:
+                '''(preempt -> re-assign) case exits
+                can handle this case with modifying last_check_time?'''
+                # assert pjob not in preempt_jobs
                 run_jobs.append(pjob)
+
+                pjob_model_name = pjob['model_name']
+                max_pause_ov = 0
+                # get maximum pause_ov assuming straggler effect (which means the effect that cannot start training until all gpus are ready) 
+                for gpu in pjob['placements'][0]['nodes'][0]['gpus']:
+                    if gpu.pause_ov != 0:
+                        if max_pause_ov < gpu.pause_ov:
+                            max_pause_ov = gpu.pause_ov
+                    # reset for later
+                    gpu.pause_ov = 0
+
+                if pjob['status'] == 'PENDING':
+                    pjob['last_check_time'] += (max_pause_ov + model_build_time[pjob_model_name] + warmup_time[pjob_model_name])
+                elif pjob['status'] == 'PREEMPTED': # preemption handles also loading checkpoint 
+                    pjob['last_check_time'] += (max_pause_ov + load_time[pjob_model_name])
+                    job['preemption_overhead'] += load_time[pjob_model_name]
         
         for rjob in run_jobs:
             if sys.maxsize == rjob['start_time']:
@@ -897,7 +930,7 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
     '''
     end_events = list()
     next_job_jump = sys.maxsize
-    while (len(JOBS.job_events) + len(JOBS.runnable_jobs))> 0:
+    while (len(JOBS.job_events) + len(JOBS.runnable_jobs)) > 0:
         if (len(JOBS.job_events) + len(end_events)) == 0:
             util.print_fn("This cluster is not large enough to run the job")
             break
@@ -983,7 +1016,7 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
                     # rjob['rank'] = cal_r_gittins_index(JOBS.job_dist_data, j_gt)
                     rjob['rank'] = get_gittins_index(j_gt)
 
-            elif 'PENDING' == rjob['status']:
+            elif rjob['status'] == 'PENDING' or rjob['status'] == 'PREEMPTED':
                 tmp = int(event_time - rjob['last_check_time']) 
                 rjob['last_check_time'] = event_time
                 rjob['pending_time'] = int(rjob['pending_time'] + tmp) #this is the total pending_time
@@ -1012,30 +1045,29 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
                 # util.print_fn('---- job[%d] completed' % rjob['job_idx'])
                 pass
 
-        #push job to their new queue
-        # JOBS.update_priority_queues(gputime)
-
         ''' schedule jobs in each queue '''
         #empty_cluster resource
-        CLUSTER.empty_infra()
+        # CLUSTER.empty_infra()
         # for "count" placement
         run_jobs = list()
         preempt_jobs = list()
 
-        # if FLAGS.schedule == 'dlas-gpu-gittins': 
-        #     q = JOBS.queues[0]
-        #     q.sort(key = lambda e:(e.__getitem__('rank'), e.__getitem__('r_submit_time')), reverse=True)
+        # print("CLUSTER.check_free_gpu()", CLUSTER.check_free_gpu())
+        # print("CLUSTER.free_gpu", CLUSTER.free_gpu)
 
+        # for virtual scheduling
+        vfree_gpu = CLUSTER.num_gpu
         for queue in JOBS.queues:
             if FLAGS.schedule == 'dlas-gpu-gittins': 
                 queue.sort(key = lambda e:(e.__getitem__('rank'), e.__getitem__('r_submit_time')), reverse=True)
             for job in queue:
-                if CLUSTER.free_gpu >= job['num_gpu']:
+                # print("selected job", job['job_idx'], ' status:', job['status'], 'requested', job['num_gpu'])
+                if vfree_gpu >= job['num_gpu']:
                     #should run
-                    if job['status'] == 'PENDING':                   
+                    if job['status'] == 'PENDING' or job['status'] == 'PREEMPTED':  
                         #not running
                         run_jobs.append(job)
-                    CLUSTER.free_gpu = int(CLUSTER.free_gpu - job['num_gpu'])
+                    vfree_gpu = int(vfree_gpu - job['num_gpu'])
                 else:
                     #should NOT run
                     if job['status'] == 'RUNNING':                   
@@ -1044,15 +1076,44 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
                     continue
         
         for job in preempt_jobs:
-            job['status'] = 'PENDING'
-            # if job['q_id'] == 0:
-            #     job['preempt'] = int(job['preempt'] + 1)
+            # add pause overhead to gpus ==> loaded job gets the overhead
+            model_name = job['model_name']
+            for gpu in job['placements'][0]['nodes'][0]['gpus']:
+                assert gpu.pause_ov == 0
+                gpu.pause_ov = pause_time[model_name] # is it copied? i wanna keep the data.
+
+            ret = CLUSTER.release_job_res_preempt(job)
+            assert ret == True
+            # job['status'] = 'PENDING'
             job['preempt'] = int(job['preempt'] + 1)
+            job['preemption_overhead'] += pause_time[model_name]
+            del job['placements'][:] 
+
         for job in run_jobs:
-            job['status'] = 'RUNNING'
-            job['resume'] = int(job['resume'] + 1)
-            if job['start_time'] == sys.maxsize:
-                job['start_time'] = event_time
+            assert job['status'] != 'RUNNING'
+            ret = try_get_job_res(job) 
+            if True == ret:
+                job['status'] = 'RUNNING'
+                job['resume'] = int(job['resume'] + 1)
+                if job['start_time'] == sys.maxsize:
+                    job['start_time'] = event_time
+                
+                model_name = job['model_name']
+                max_pause_ov = 0
+                # get maximum pause_ov assuming straggler effect (which means the effect that cannot start training until all gpus are ready) 
+                for gpu in job['placements'][0]['nodes'][0]['gpus']:
+                    if gpu.pause_ov != 0:
+                        if max_pause_ov < gpu.pause_ov:
+                            max_pause_ov = gpu.pause_ov
+                    # reset for later
+                    gpu.pause_ov = 0
+
+                if job['status'] == 'PENDING':
+                    job['last_check_time'] += (max_pause_ov + model_build_time[model_name] + warmup_time[model_name])
+                elif job['status'] == 'PREEMPTED': # preemption handles also loading checkpoint 
+                    job['last_check_time'] += (max_pause_ov + load_time[model_name])
+                    job['preemption_overhead'] += load_time[model_name]
+            # assert ret == True
 
 
         #sort based on the job start time
@@ -1061,71 +1122,15 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
             pending_job = list()
             for job in queue: 
                 # if sys.maxsize == job['start_time'] and job['status'] == 'PENDING':
-                if job['status'] == 'PENDING':
+                if job['status'] == ('PENDING' or 'PREEMPTED'):
                     pending_job.append(job)
                     # print(job['job_idx'])
             for job in pending_job: 
                 queue.remove(job)
             queue.extend(pending_job)
 
-
-        #for fit-job-first, move small running jobs in front of large pending jobs in each queue
-        # for queue in JOBS.queues:
-        #     num_j = len(queue)
-        #     #find the first pending job
-        #     for i in range(num_j):
-        #         if queue[i]['status'] == 'PENDING':
-        #             break
-        #     first_pending_idx = i
-
-        #     #picking running_after_pending_jobs
-        #     run_after_pending = list()
-        #     for j in range(first_pending_idx, num_j):
-        #         if queue[j]['status'] == 'RUNNING': 
-        #             run_after_pending.append(queue[j])
-
-        #     #reinsert all those jobs
-        #     for job in run_after_pending: 
-        #         queue.remove(job)
-        #     for job in run_after_pending:
-        #         queue.insert(i, job)
-        #         i = int(i + 1)
-
-
-        # for queue in JOBS.queues:
-        #     for job in queue:
-        #         if 'RUNNING' == job['status']:
-        #             if 'placements' in job:
-        #                 del job['placements'][:]
-        #             job['status'] = 'PENDING'
-        #         ret = try_get_job_res(job)
-        #         if True == ret:
-        #             job['status'] = 'RUNNING'
-        #             if 0 == job['start_time'] and 0 != job['submit_time']:
-        #                 job['start_time'] = event_time
-        #         else:
-        #             job['status'] = 'PENDING'
-        #             continue
-
-
-
         #update end events and sort, and get the most recent one
         del end_events[:]
-        # for rjob in JOBS.runnable_jobs:
-        #     if 'RUNNING' == rjob['status']:
-        #         remaining_time = rjob['duration'] - rjob['total_executed_time']
-        #         end_time = int(event_time + remaining_time)
-        #         tmp_dict = util.search_dict_list(end_events, 'time', end_time)
-        #         if tmp_dict == None:
-        #             #not found, add the time into to job_events
-        #             tmp_dict = dict()
-        #             tmp_dict['time'] = end_time
-        #             tmp_dict['end_jobs'] = list()
-        #             tmp_dict['end_jobs'].append(rjob)
-        #             end_events.append(tmp_dict)
-        #         else:
-        #             tmp_dict['end_jobs'].append(rjob)
-        # end_events.sort(key = lambda e:e.__getitem__('time'))
         min_end_time = sys.maxsize
         tmp_end_event = dict()
         for rjob in JOBS.runnable_jobs:
@@ -1155,7 +1160,7 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
                     if jump_time < next_job_jump:
                         next_job_jump = jump_time
 
-            elif 'PENDING' == rjob['status']: # when pending job will be push back to Q0
+            elif ('PENDING' or 'PREEMPTED') == rjob['status']: # when pending job will be push back to Q0
                 if solve_starvation > 0 and rjob['q_id'] > 0 and rjob['total_executed_time'] and rjob['executed_time'] > 0:
                     diff_time = int(rjob['executed_time'] * solve_starvation - rjob['last_pending_time'])
                     if diff_time > 0:

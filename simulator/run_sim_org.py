@@ -990,7 +990,7 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
 
         ''' schedule jobs in each queue '''
         #empty_cluster resource
-        CLUSTER.empty_infra()
+        # CLUSTER.empty_infra()
         # for "count" placement
         run_jobs = list()
         preempt_jobs = list()
@@ -999,6 +999,7 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
         #     q = JOBS.queues[0]
         #     q.sort(key = lambda e:(e.__getitem__('rank'), e.__getitem__('r_submit_time')), reverse=True)
 
+        # print("CLUSTER.check_free_gpu()", CLUSTER.check_free_gpu())
         for queue in JOBS.queues:
             if FLAGS.schedule == 'dlas-gpu-gittins': 
                 queue.sort(key = lambda e:(e.__getitem__('rank'), e.__getitem__('r_submit_time')), reverse=True)
@@ -1021,6 +1022,7 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
             # if job['q_id'] == 0:
             #     job['preempt'] = int(job['preempt'] + 1)
             job['preempt'] = int(job['preempt'] + 1)
+
         for job in run_jobs:
             job['status'] = 'RUNNING'
             job['resume'] = int(job['resume'] + 1)
